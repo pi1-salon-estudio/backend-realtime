@@ -2,6 +2,7 @@ import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { app } from './app.js'
 import { env } from './config/env.js'
+import { exigirSesion } from './socket/autenticacion.js'
 import { registrarEventos } from './socket/eventos.js'
 
 // Express y Socket.IO comparten el mismo servidor HTTP y el mismo puerto.
@@ -20,6 +21,8 @@ const io = new Server(httpServer, {
   },
 })
 
+// Primero la sesión: ningún evento se registra para un socket que no la tenga.
+exigirSesion(io)
 registrarEventos(io)
 
 httpServer.listen(env.port, () => {
