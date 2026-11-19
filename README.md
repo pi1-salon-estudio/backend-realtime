@@ -24,14 +24,17 @@ El contrato de cada evento (nombre, datos y respuesta) está en [`docs/eventos.m
 
 Hoy existe `base:ping`, que sirve para comprobar que el frontend llega a este servidor.
 
+Toda conexión exige el ID token de Firebase en `auth.token`. Sin token, o con uno inválido o revocado, la conexión se rechaza con `NO_AUTORIZADO`. El detalle está en [`docs/eventos.md`](docs/eventos.md).
+
 ## Variables de entorno
 
 | Variable | Para qué sirve | En local | En Render |
 |---|---|---|---|
 | `PORT` | Puerto donde escucha el servidor | `4000` | No se define, Render la asigna |
 | `CORS_ORIGINS` | Orígenes que pueden conectarse, separados por coma | `http://localhost:5173,http://localhost:8080` | `https://pi1-salon-estudio.vercel.app` |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Ruta a la llave de la cuenta de servicio de Firebase, para verificar el ID token. Fuera del repositorio | `C:\secrets\pi1-salon-estudio\firebase-admin.json` | `/etc/secrets/firebase-admin.json` (Secret File) |
 
-`CORS_ORIGINS` se revisa en las dos formas de conexión de Socket.IO. En HTTP lo hace la opción `cors`. En WebSocket lo hace `allowRequest`, porque los navegadores no aplican CORS a WebSocket. Las conexiones que no envían origen, como un script de Node, pasan. Esto evita que otra página web se conecte, pero no reemplaza la autenticación, que llega con el inicio de sesión.
+`CORS_ORIGINS` se revisa en las dos formas de conexión de Socket.IO. En HTTP lo hace la opción `cors`. En WebSocket lo hace `allowRequest`, porque los navegadores no aplican CORS a WebSocket. Las conexiones que no envían origen, como un script de Node, pasan este filtro. Esto evita que otra página web se conecte; quien sí se conecta debe tener sesión.
 
 ## Ejecutar en local
 
@@ -43,17 +46,13 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-El servidor queda en http://localhost:4000. Para comprobar que responde:
+El servidor queda en http://localhost:4000. Para comprobarlo hace falta un ID token de una cuenta de prueba:
 
 ```powershell
-npm run probar:ping
+npm run probar:ping -- http://localhost:4000 <ID token>
 ```
 
-Tiene que mostrar `Respuesta de base:ping: { estado: 'ok', ... }`. Para probar el servidor publicado:
-
-```powershell
-npm run probar:ping -- https://pi1-salon-estudio-realtime.onrender.com
-```
+Tiene que mostrar `Respuesta de base:ping: { estado: 'ok', ... }`. Sin token, o con uno inválido, muestra `Conexión rechazada ... NO_AUTORIZADO`. Para probar el servidor publicado, cambia la URL por `https://pi1-salon-estudio-realtime.onrender.com`. El script no imprime el token.
 
 | Script | Qué hace |
 |---|---|
@@ -61,7 +60,7 @@ npm run probar:ping -- https://pi1-salon-estudio-realtime.onrender.com
 | `npm run typecheck` | Revisa los tipos sin generar archivos |
 | `npm run build` | Compila TypeScript a `dist/` |
 | `npm start` | Ejecuta la versión compilada |
-| `npm run probar:ping` | Se conecta, envía `base:ping` y muestra la respuesta |
+| `npm run probar:ping -- <URL> [token]` | Se conecta con o sin token, envía `base:ping` y muestra la respuesta o el rechazo |
 
 ## Ejecutar con Docker
 
@@ -70,7 +69,7 @@ docker build -t pi1-backend-realtime .
 docker run --rm -p 4000:4000 --env-file .env pi1-backend-realtime
 ```
 
-Este servicio no necesita la llave de Firebase.
+El contenedor necesita la llave de Firebase para verificar el ID token. Con `docker run`, móntala como archivo de solo lectura y apunta `GOOGLE_APPLICATION_CREDENTIALS` a esa ruta. En el `docker-compose.yml` de `infra` ya va montada como secreto.
 
 La imagen tiene dos etapas: la primera compila TypeScript y la segunda solo lleva el código compilado y las dependencias de producción. El proceso corre con el usuario `node`, no como root.
 

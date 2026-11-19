@@ -5,11 +5,12 @@ export interface RespuestaPing {
   recibidoEn: string
 }
 
-// Un archivo por grupo de eventos. En S0 solo existe base:ping, que sirve
+// Un archivo por grupo de eventos. Por ahora solo existe base:ping, que sirve
 // para comprobar de punta a punta que el frontend llega a este servidor.
+// Para llegar aquí el socket ya pasó por exigirSesion: socket.data.uid existe.
 export function registrarEventos(io: Server): void {
   io.on('connection', (socket) => {
-    console.log(`Conexión ${socket.id}. Conectados: ${io.of('/').sockets.size}`)
+    console.log(`Conexión ${socket.id} de ${socket.data.uid}. Conectados: ${io.of('/').sockets.size}`)
 
     socket.on('base:ping', (ack: unknown) => {
       // El cliente decide si espera respuesta. Si no manda función, no se responde
