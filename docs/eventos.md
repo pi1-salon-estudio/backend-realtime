@@ -30,7 +30,7 @@ Se pasa `auth` como función para que cada reconexión pida un token vigente. Un
 
 Cuando el servidor rechaza la conexión, el cliente no reintenta solo. El frontend decide si vuelve a conectar, por ejemplo después de refrescar el token.
 
-El token se revisa al conectar, no en cada evento. Los eventos que necesiten permisos (unirse a una sala, enviar mensajes, Sprint 3) los revisan con `socket.data.uid`.
+El token se revisa al conectar, no en cada evento. Entrar a una sala y enviar un mensaje usan el uid guardado en `socket.data.uid`.
 
 ## Eventos
 
@@ -51,3 +51,63 @@ socket.emit('base:ping', (respuesta) => {
 ```
 
 Si el cliente no manda función de respuesta, el servidor ignora el evento.
+
+### `sala:entrar` (US-10, US-11)
+
+Mete la conexión en la sala. Sin este paso, `chat:enviar` no guarda nada. La sala tiene que existir.
+
+| Dirección | Datos que envía | Respuesta (ack) |
+|---|---|---|
+| Cliente → servidor | `{ "salaId": "7Qk2mXrB9tLwN4pZs1Ha" }` | `{ "ok": true, "salaId": "7Qk2mXrB9tLwN4pZs1Ha" }` |
+
+Si el ID no existe o no sirve: `{ "ok": false, "codigo": "SALA_NO_ENCONTRADA", "mensaje": "No encontramos una sala con ese ID." }`.
+
+### `sala:salir`
+
+Saca la conexión de la sala. Al desconectarse, Socket.IO también la saca.
+
+| Dirección | Datos que envía | Respuesta (ack) |
+|---|---|---|
+| Cliente → servidor | `{ "salaId": "7Qk2mXrB9tLwN4pZs1Ha" }` | `{ "ok": true, "salaId": "7Qk2mXrB9tLwN4pZs1Ha" }` |
+
+### `sala:eliminar` (US-07)
+
+Solo el anfitrión. Avisa a quienes están en la sala y después borra la sala con sus mensajes. Quien no la creó recibe `SIN_PERMISO` y no se borra nada.
+
+| Dirección | Datos que envía | Respuesta (ack) |
+|---|---|---|
+| Cliente → servidor | `{ "salaId": "7Qk2mXrB9tLwN4pZs1Ha" }` | `{ "ok": true, "salaId": "7Qk2mXrB9tLwN4pZs1Ha" }` |
+
+### `sala:eliminada` (US-07)
+
+Lo emite el servidor a la sala, incluido el anfitrión, antes de borrarla.
+
+| Dirección | Datos |
+|---|---|
+| Servidor → cliente | `{ "salaId": "7Qk2mXrB9tLwN4pZs1Ha" }` |
+
+La misma operación sin el aviso en vivo está en `DELETE /api/v1/salas/{id}`.
+
+### `chat:enviar` (US-10)
+
+Guarda el mensaje en `salas/{salaId}/mensajes` y lo emite a las demás personas de esa sala. El texto se recorta: vacío o de más de 500 caracteres no se guarda. Hay que haber entrado antes a esa sala. Un mensaje de una sala no llega a otra.
+
+| Dirección | Datos que envía | Respuesta (ack) |
+|---|---|---|
+| Cliente → servidor | `{ "salaId": "7Qk2mXrB9tLwN4pZs1Ha", "texto": "Nos vemos a las 4." }` | `{ "ok": true, "mensaje": { "id", "salaId", "texto", "autorUid", "nombreUsuario", "creadoEn" } }` |
+
+Errores: `MENSAJE_INVALIDO`, `NO_ESTAS_EN_LA_SALA`, `SALA_NO_ENCONTRADA`, `PERFIL_INCOMPLETO`.
+
+### `chat:mensaje` (US-10)
+
+Lo emite el servidor a quienes están en la sala, menos a quien lo envió. Quien lo envió usa la respuesta de `chat:enviar`.
+
+| Dirección | Datos |
+|---|---|
+| Servidor → cliente | `{ "id", "salaId", "texto", "autorUid", "nombreUsuario", "creadoEn" }` |
+
+El historial no viaja por aquí. Se lee con `GET /api/v1/salas/{id}/mensajes` en la API.
+
+## Reconexión
+
+Si la red vuelve en menos de dos minutos, Socket.IO recupera las salas y entrega los `chat:mensaje` que faltaron. La sesión se comprueba otra vez. Si pasó más tiempo, el cliente vuelve a emitir `sala:entrar` y carga el historial con la API.
