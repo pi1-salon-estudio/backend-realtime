@@ -10,6 +10,9 @@ import { registrarEventos } from './socket/eventos.js'
 const httpServer = createServer(app)
 
 const io = new Server(httpServer, {
+  // Si la red se cae menos de dos minutos, Socket.IO devuelve al cliente a sus salas
+  // y le entrega los eventos que no alcanzó a oír. La sesión se vuelve a comprobar.
+  connectionStateRecovery: { maxDisconnectionDuration: 2 * 60 * 1000, skipMiddlewares: false },
   // cors solo aplica a las peticiones HTTP de Socket.IO (polling).
   cors: { origin: env.corsOrigins },
   // Los navegadores no aplican CORS a WebSocket, así que el origen se revisa aquí también.
