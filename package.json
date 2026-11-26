@@ -11,7 +11,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/chat/validar.test.ts",
+    "test": "tsx --test src/chat/validar.test.ts src/chat/presencia.test.ts",
     "probar:ping": "node scripts/probar-ping.mjs"
   },
   "dependencies": {

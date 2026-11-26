@@ -1,5 +1,6 @@
 import type { Server, Socket } from 'socket.io'
-import { anfitrionDe, borrarSala, guardarMensaje, leerEnvio, leerSala, salaExiste } from '../chat/mensajes.js'
+import { anfitrionDe, borrarSala, guardarMensaje, leerEnvio, leerSala } from '../chat/mensajes.js'
+import { avisarParticipantes, cargarPerfil } from '../chat/presencia.js'
 
 export interface RespuestaPing {
   estado: 'ok'
@@ -11,6 +12,13 @@ type Ack = (respuesta: unknown) => void
 function salasDe(socket: Socket): Set<string> {
   if (!(socket.data.salas instanceof Set)) socket.data.salas = new Set<string>()
   return socket.data.salas as Set<string>
+}
+
+// Anfitrión de cada sala en la que está la conexión. Se guarda al entrar para poder
+// avisar la salida al desconectarse sin volver a leer Firestore.
+function anfitrionesDe(socket: Socket): Map<string, string> {
+  if (!(socket.data.anfitriones instanceof Map)) socket.data.anfitriones = new Map<string, string>()
+  return socket.data.anfitriones as Map<string, string>
 }
 
 function responder(ack: unknown, respuesta: unknown): void {
@@ -36,13 +44,18 @@ export function registrarEventos(io: Server): void {
         responder(ack, { ok: false, codigo: 'SALA_NO_ENCONTRADA', mensaje: 'No encontramos una sala con ese ID.' })
         return
       }
-      if (!(await salaExiste(salaId))) {
+      const anfitrion = await anfitrionDe(salaId)
+      if (anfitrion === null) {
         responder(ack, { ok: false, codigo: 'SALA_NO_ENCONTRADA', mensaje: 'No encontramos una sala con ese ID.' })
         return
       }
+      await cargarPerfil(socket)
       await socket.join(nombreSala(salaId))
       salasDe(socket).add(salaId)
-      responder(ack, { ok: true, salaId })
+      anfitrionesDe(socket).set(salaId, anfitrion)
+      // Entrar dos veces (por ejemplo, al reconectar) no duplica: la lista sale de las conexiones.
+      const participantes = await avisarParticipantes(io, salaId, anfitrion)
+      responder(ack, { ok: true, salaId, participantes })
     })
 
     socket.on('sala:salir', async (entrada: unknown, ack: unknown) => {
@@ -53,7 +66,10 @@ export function registrarEventos(io: Server): void {
       }
       await socket.leave(nombreSala(salaId))
       salasDe(socket).delete(salaId)
+      const anfitrion = anfitrionesDe(socket).get(salaId)
+      anfitrionesDe(socket).delete(salaId)
       responder(ack, { ok: true, salaId })
+      if (anfitrion !== undefined) await avisarParticipantes(io, salaId, anfitrion)
     })
 
     socket.on('sala:eliminar', async (entrada: unknown, ack: unknown) => {
@@ -74,6 +90,7 @@ export function registrarEventos(io: Server): void {
       io.to(nombreSala(salaId)).emit('sala:eliminada', { salaId })
       await borrarSala(salaId)
       salasDe(socket).delete(salaId)
+      anfitrionesDe(socket).delete(salaId)
       responder(ack, { ok: true, salaId })
     })
 
@@ -100,6 +117,12 @@ export function registrarEventos(io: Server): void {
 
     socket.on('disconnect', (motivo) => {
       console.log(`Desconexión ${socket.id} (${motivo}). Conectados: ${io.of('/').sockets.size}`)
+      // En «disconnect» la conexión ya salió de sus rooms: la lista que se emite ya no la incluye.
+      for (const [salaId, anfitrion] of anfitrionesDe(socket)) {
+        avisarParticipantes(io, salaId, anfitrion).catch((error: unknown) => {
+          console.error(`No se pudo avisar la salida en ${salaId}`, error)
+        })
+      }
     })
   })
 }
