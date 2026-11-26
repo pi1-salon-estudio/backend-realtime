@@ -58,9 +58,11 @@ Mete la conexión en la sala. Sin este paso, `chat:enviar` no guarda nada. La sa
 
 | Dirección | Datos que envía | Respuesta (ack) |
 |---|---|---|
-| Cliente → servidor | `{ "salaId": "7Qk2mXrB9tLwN4pZs1Ha" }` | `{ "ok": true, "salaId": "7Qk2mXrB9tLwN4pZs1Ha" }` |
+| Cliente → servidor | `{ "salaId": "7Qk2mXrB9tLwN4pZs1Ha" }` | `{ "ok": true, "salaId": "7Qk2mXrB9tLwN4pZs1Ha", "participantes": [Participante] }` |
 
 Si el ID no existe o no sirve: `{ "ok": false, "codigo": "SALA_NO_ENCONTRADA", "mensaje": "No encontramos una sala con ese ID." }`.
+
+Al entrar, el servidor también emite `sala:participantes` a toda la sala. Entrar dos veces (por ejemplo, al reconectar) no duplica a nadie.
 
 ### `sala:salir`
 
@@ -69,6 +71,16 @@ Saca la conexión de la sala. Al desconectarse, Socket.IO también la saca.
 | Dirección | Datos que envía | Respuesta (ack) |
 |---|---|---|
 | Cliente → servidor | `{ "salaId": "7Qk2mXrB9tLwN4pZs1Ha" }` | `{ "ok": true, "salaId": "7Qk2mXrB9tLwN4pZs1Ha" }` |
+
+### `sala:participantes` (US-10)
+
+Lista de quienes están conectados a la sala. Lo emite el servidor a toda la sala cuando alguien entra, sale o se desconecta. Quién entró o salió lo deduce el cliente comparando con la lista anterior.
+
+| Dirección | Datos |
+|---|---|
+| Servidor → cliente | `{ "salaId": "7Qk2mXrB9tLwN4pZs1Ha", "participantes": [Participante] }` |
+
+`Participante` = `{ "uid", "nombreUsuario", "avatar", "esAnfitrion" }`. Una persona con dos pestañas aparece una vez. El anfitrión va primero y el resto por nombre de usuario. Participante es quien está conectado en ese momento: la lista vive en memoria del servidor, no en Firestore.
 
 ### `sala:eliminar` (US-07)
 
